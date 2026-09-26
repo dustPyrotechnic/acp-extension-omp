@@ -1,0 +1,19 @@
+name: Real OMP contract
+
+on:
+  workflow_dispatch:
+
+jobs:
+  contract-real:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contract:real
