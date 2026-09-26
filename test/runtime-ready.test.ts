@@ -24,18 +24,23 @@ async function readFixture(frame?: string): Promise<string> {
   return stdout.trim();
 }
 
-describe("OMP RPC ready frame", () => {
-  it("accepts the supported protocol version from a real child-process boundary", async () => {
+describe("synthetic OMP RPC child-process fixture", () => {
+  it("accepts the complete ready contract across a child-process boundary", async () => {
     await expect(parseReadyFrame(await readFixture())).resolves.toEqual({
       type: "ready",
       protocolVersion: 1,
+      supportedProtocolVersions: [1, 2],
+      maxFrameBytes: 1_048_576,
+      maxReassembledFrameBytes: 67_108_864,
     });
   });
 
   it("rejects an unsupported protocol version", async () => {
-    const line = await readFixture('{"type":"ready","protocolVersion":3}');
+    const line = await readFixture(
+      '{"type":"ready","protocolVersion":3,"supportedProtocolVersions":[3],"maxFrameBytes":1048576,"maxReassembledFrameBytes":67108864}',
+    );
     await expect(parseReadyFrame(line)).rejects.toThrow(
-      "Unsupported OMP RPC protocol version: 3",
+      "No compatible OMP RPC protocol version",
     );
   });
 });

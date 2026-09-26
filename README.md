@@ -33,3 +33,16 @@ controlled real OMP 18.2.8 session and usage probes. Until then it always exits
 nonzero, even when `OMP_PATH` is present.
 
 Synthetic fixtures prove parser and process-boundary behavior only.
+
+## Implemented OMP RPC boundary
+
+The adapter currently provides a bounded incremental JSONL decoder and the
+initial `ready` negotiation gate. Before parsing JSON it limits each UTF-8
+frame to 1 MiB, accepts LF or CRLF, ignores empty lines, rejects incomplete
+EOF frames, and reports bounded errors without echoing payloads.
+
+The first non-empty object must be a complete `ready` frame with a compatible
+protocol version and valid frame limits. Extra ready fields are ignored at the
+public boundary. After negotiation, unknown object frames pass through for a
+future dispatcher; correlation and session, prompt, abort, and terminal-state
+handling are not implemented yet.
