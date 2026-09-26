@@ -1,3 +1,4 @@
+import { TextDecoder } from "node:util";
 import { z } from "zod";
 
 export const MAX_INITIAL_FRAME_BYTES = 1_048_576;
@@ -5,6 +6,7 @@ export const MAX_INITIAL_FRAME_BYTES = 1_048_576;
 export type OmpRpcFrame = Record<string, unknown>;
 
 const positiveSafeInteger = z.number().int().positive().safe();
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 const readyFrameSchema = z
   .object({
@@ -51,10 +53,11 @@ export class OmpRpcJsonlDecoder {
       const newline = input.indexOf(0x0a, offset);
       if (newline === -1) {
         const remainder = input.subarray(offset);
-        if (
-          this.#buffer.byteLength + remainder.byteLength >
-          this.#maxFrameBytes
-        ) {
+        const totalBytes = this.#buffer.byteLength + remainder.byteLength;
+        const trailingByte =
+          remainder.at(-1) ?? this.#buffer.at(this.#buffer.byteLength - 1);
+        const frameBytes = totalBytes - (trailingByte === 0x0d ? 1 : 0);
+        if (frameBytes > this.#maxFrameBytes) {
           throw new Error(`OMP RPC frame exceeds ${this.#maxFrameBytes} bytes`);
         }
         this.#buffer = Buffer.concat([this.#buffer, remainder]);
@@ -62,7 +65,11 @@ export class OmpRpcJsonlDecoder {
       }
 
       const segment = input.subarray(offset, newline);
-      if (this.#buffer.byteLength + segment.byteLength > this.#maxFrameBytes) {
+      const totalBytes = this.#buffer.byteLength + segment.byteLength;
+      const trailingByte =
+        segment.at(-1) ?? this.#buffer.at(this.#buffer.byteLength - 1);
+      const frameBytes = totalBytes - (trailingByte === 0x0d ? 1 : 0);
+      if (frameBytes > this.#maxFrameBytes) {
         throw new Error(`OMP RPC frame exceeds ${this.#maxFrameBytes} bytes`);
       }
       let line = Buffer.concat([this.#buffer, segment]);
@@ -73,7 +80,7 @@ export class OmpRpcJsonlDecoder {
 
       let value: unknown;
       try {
-        value = JSON.parse(line.toString("utf8"));
+        value = JSON.parse(utf8Decoder.decode(line));
       } catch {
         throw invalidFrame();
       }

@@ -72,13 +72,42 @@ describe("OMP RPC incremental JSONL decoder", () => {
     const decoder = new OmpRpcJsonlDecoder();
     expect(decoder.push(paddedExact)).toHaveLength(1);
 
+    const exactWithCrlf = Buffer.concat([
+      paddedExact.subarray(0, -1),
+      Buffer.from("\r\n"),
+    ]);
+    expect(new OmpRpcJsonlDecoder().push(exactWithCrlf)).toHaveLength(1);
+
+    const splitCrlfDecoder = new OmpRpcJsonlDecoder();
+    expect(splitCrlfDecoder.push(exactWithCrlf.subarray(0, -1))).toEqual([]);
+    expect(splitCrlfDecoder.push(Buffer.from("\n"))).toHaveLength(1);
+
     const oversized = Buffer.concat([
       Buffer.alloc(MAX_INITIAL_FRAME_BYTES + 1, 0x20),
-      Buffer.from("\n"),
+      Buffer.from("\r\n"),
     ]);
     expect(() => new OmpRpcJsonlDecoder().push(oversized)).toThrow(
       "OMP RPC frame exceeds 1048576 bytes",
     );
+  });
+
+  it("rejects malformed UTF-8 without reflecting decoded payload", () => {
+    const decoder = new OmpRpcJsonlDecoder();
+    const malformed = Buffer.concat([
+      Buffer.from('{"text":"secret-payload'),
+      Buffer.from([0xc3, 0x28]),
+      Buffer.from('"}\n'),
+    ]);
+
+    expect(() => decoder.push(malformed)).toThrow(
+      "Invalid OMP RPC JSONL frame",
+    );
+    try {
+      new OmpRpcJsonlDecoder().push(malformed);
+    } catch (error) {
+      expect(String(error)).not.toContain("secret-payload");
+      expect(String(error).length).toBeLessThan(128);
+    }
   });
 
   it("rejects a non-empty residual frame at EOF", () => {
