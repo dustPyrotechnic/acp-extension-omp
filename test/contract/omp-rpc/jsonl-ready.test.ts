@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_INITIAL_FRAME_BYTES,
+  MAX_REASSEMBLED_FRAME_BYTES,
   OmpRpcJsonlDecoder,
   OmpRpcReadyGate,
   parseReadyFrame,
@@ -157,11 +158,50 @@ describe("OMP RPC ready negotiation gate", () => {
       "reassembled limit below frame limit",
       { maxFrameBytes: 100, maxReassembledFrameBytes: 99 },
     ],
+    [
+      "frame limit above the adapter ceiling",
+      { maxFrameBytes: MAX_INITIAL_FRAME_BYTES + 1 },
+    ],
+    [
+      "reassembled limit above the adapter ceiling",
+      { maxReassembledFrameBytes: MAX_REASSEMBLED_FRAME_BYTES + 1 },
+    ],
   ])("rejects %s", (_label, changes) => {
     const gate = new OmpRpcReadyGate([1, 2]);
     expect(() => gate.accept({ ...ready, ...changes })).toThrow(
       "Invalid OMP RPC ready frame",
     );
+  });
+
+  it("rejects peer limits above adapter ceilings without reflecting input", () => {
+    const secret = "secret-payload";
+    const excessiveLimits = [
+      { maxFrameBytes: MAX_INITIAL_FRAME_BYTES + 1 },
+      { maxReassembledFrameBytes: MAX_REASSEMBLED_FRAME_BYTES + 1 },
+    ];
+
+    for (const limits of excessiveLimits) {
+      let error: unknown;
+      try {
+        new OmpRpcReadyGate([1, 2]).accept({
+          ...ready,
+          ...limits,
+          privateFutureField: secret,
+        });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(String(error)).toBe("Error: Invalid OMP RPC ready frame");
+      expect(String(error)).not.toContain(secret);
+    }
+  });
+
+  it("rejects additional JSONL frames in the single-line ready parser", async () => {
+    await expect(
+      parseReadyFrame(
+        `${JSON.stringify(ready)}\n${JSON.stringify({ type: "secret-payload" })}`,
+      ),
+    ).rejects.toThrow("Invalid OMP RPC ready frame");
   });
 
   it("fails closed when a business frame arrives before ready", () => {

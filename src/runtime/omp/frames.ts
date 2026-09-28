@@ -2,6 +2,7 @@ import { TextDecoder } from "node:util";
 import { z } from "zod";
 
 export const MAX_INITIAL_FRAME_BYTES = 1_048_576;
+export const MAX_REASSEMBLED_FRAME_BYTES = 67_108_864;
 
 export type OmpRpcFrame = Record<string, unknown>;
 
@@ -16,8 +17,10 @@ const readyFrameSchema = z
       .array(positiveSafeInteger)
       .nonempty()
       .refine((versions) => new Set(versions).size === versions.length),
-    maxFrameBytes: positiveSafeInteger,
-    maxReassembledFrameBytes: positiveSafeInteger,
+    maxFrameBytes: positiveSafeInteger.max(MAX_INITIAL_FRAME_BYTES),
+    maxReassembledFrameBytes: positiveSafeInteger.max(
+      MAX_REASSEMBLED_FRAME_BYTES,
+    ),
   })
   .strip()
   .refine((frame) =>
@@ -145,6 +148,7 @@ export class OmpRpcReadyGate {
 }
 
 export async function parseReadyFrame(line: string): Promise<OmpReadyFrame> {
+  if (line.includes("\n")) throw new Error("Invalid OMP RPC ready frame");
   const decoder = new OmpRpcJsonlDecoder();
   const frames = decoder.push(Buffer.from(`${line}\n`));
   const frame = frames[0];
