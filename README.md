@@ -43,6 +43,18 @@ EOF frames, and reports bounded errors without echoing payloads.
 
 The first non-empty object must be a complete `ready` frame with a compatible
 protocol version and valid frame limits. Extra ready fields are ignored at the
-public boundary. After negotiation, unknown object frames pass through for a
-future dispatcher; correlation and session, prompt, abort, and terminal-state
-handling are not implemented yet.
+public boundary.
+
+After negotiation, the internal correlation substrate validates bounded
+`response` envelopes and matches them by both connection-local request ID and
+exact command. Requests use deterministic injected timeouts; mismatches,
+duplicates, orphans, late responses, EOF, and process exit fail closed without
+completing an unrelated request. Unknown provider response fields remain an
+opaque internal body for a future command-specific parser and are not exposed
+through ACP.
+
+The only recorded query command names are `get_state`, `get_session_stats`,
+`get_available_models`, and `get_available_commands`. Their provider payloads
+are not parsed, and session statistics do not produce model usage. Unknown
+non-response objects pass through for a future event dispatcher. Real session,
+prompt, abort, usage, and terminal-state handling are not implemented yet.
